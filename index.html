@@ -228,6 +228,20 @@
     font-size: 15px;
     margin: 0 0 3px;
   }
+  .required-flag{
+    display: inline-block;
+    background: #FBEAE5;
+    color: var(--error-red);
+    font-family: var(--font-body);
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    vertical-align: middle;
+    margin-left: 6px;
+  }
   .transport-block .sub{
     font-size: 12.5px;
     color: #8a8570;
@@ -581,7 +595,7 @@
 ======================================================= */
 const CONFIG = {
   GOOGLE_CLIENT_ID: "583189972411-64j1bbe2g7og220klntfau1s05pm4cd4.apps.googleusercontent.com",
-  API_URL: "https://script.google.com/macros/s/AKfycbwq2BM42-Xq3OkU8KuAsaNoT6GWjop7-UDnqGqJfHKVSl9zGHEsABkFMeUUrDgtb5SK/exec",
+  API_URL: "https://script.google.com/macros/s/AKfycbwuSyWOiY8GTz-HOiR_RFQbK8P23Lp96NLQSCoz_E_GZibb5YD_oY8KCwq0pyFywFoD/exec",
   TERMS_URL: "https://drive.google.com/file/d/1lv6g7sX74WQEDHTOvwxV8MypSFHiV-OC/view?usp=drive_link",
   // Optional: restrict Google Sign-In to one Google Workspace domain (e.g. "mtfa.org").
   // Leave blank ("") to allow any Google account.
@@ -630,6 +644,7 @@ const opsPlan = {
 let idToken = null;
 let signedInEmail = null;
 let currentChecklistState = {};
+let currentParticipantData = null;
 
 const loginCard = document.getElementById('loginCard');
 const loginError = document.getElementById('loginError');
@@ -708,6 +723,8 @@ function switchLabel(transport){
     : 'No, I want to meet at MTFA instead';
 }
 
+let transportConfirmedState = false;
+
 async function switchTransport(){
   const switchBtn = document.getElementById('switchBtn');
   const confirmBtn = document.getElementById('confirmBtn');
@@ -731,6 +748,7 @@ async function switchTransport(){
     const badge = document.getElementById('confirmedBadge');
     badge.textContent = '✓ Updated and confirmed';
     badge.style.display = 'flex';
+    transportConfirmedState = true;
   } catch(err){
     switchBtn.disabled = false;
     switchBtn.textContent = switchLabel(currentText);
@@ -740,8 +758,10 @@ async function switchTransport(){
 
 function renderDetail(p){
   detailCard.style.display = 'block';
+  currentParticipantData = p;
   currentChecklistState = {};
   checklistItems.forEach(c => { currentChecklistState[c.key] = !!p[c.key]; });
+  transportConfirmedState = !!p.TransportConfirmed;
 
   const roleDisplay = p.Role ? p.Role : 'Participant';
   const role = String(roleDisplay).toLowerCase();
@@ -754,18 +774,17 @@ function renderDetail(p){
     html += '<div class="bracket-note">You\'re playing in the tournament — check the bracket embedded below on this page for your match time and court.</div>';
   }
 
+  const teamDisplay = p.Squad ? p.Squad : p.Team;
+
   html += '<div class="detail-grid">';
-  html += '<div class="detail-field"><div class="label">Team</div><div class="value">' + escapeHtml(p.Team) + '</div></div>';
+  html += '<div class="detail-field"><div class="label">Team</div><div class="value">' + escapeHtml(teamDisplay) + '</div></div>';
   html += '<div class="detail-field"><div class="label">Role</div><div class="value">' + escapeHtml(roleDisplay) + '</div></div>';
-  if(p.Squad){
-    html += '<div class="detail-field full"><div class="label">Squad / Group Name</div><div class="value">' + escapeHtml(p.Squad) + '</div></div>';
-  }
   html += '<div class="detail-field full"><div class="label">Reporting Time</div><div class="value" id="reportingTimeValue">' + reportingTime + '</div></div>';
   html += '</div>';
 
   html += '<div class="transport-block">';
-  html += '<h2>Transport plan</h2>';
-  html += '<p class="sub">This is what you selected when you signed up.</p>';
+  html += '<h2>Transport plan <span class="required-flag">Required</span></h2>';
+  html += '<p class="sub">This is what you selected when you signed up — please confirm or change it to continue.</p>';
   html += '<div class="transport-plan-text" id="transportText">' + escapeHtml(p.Transport) + '</div>';
   html += '<div class="transport-btn-row">';
   html += '<button class="confirm-btn" id="confirmBtn" onclick="confirmTransport()">Yes, this is still correct</button>';
@@ -787,7 +806,7 @@ function renderDetail(p){
   }
 
   html += '<div class="checklist">';
-  html += '<h2>Pre-event checklist</h2>';
+  html += '<h2>Pre-event checklist <span class="required-flag">Required to sign</span></h2>';
   html += '<p class="sub">Tick off each item before you head to the venue. Your progress is saved automatically.</p>';
   html += '<div class="progress-label" id="progressLabel"></div>';
   html += '<div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>';
@@ -808,7 +827,7 @@ function renderDetail(p){
 
   html += '<div class="signature-block">';
   html += '<h2>Signature</h2>';
-  html += '<p class="sub">Sign below to confirm you\'ve read and agree to the Terms & Conditions.</p>';
+  html += '<p class="sub">Sign below to confirm you\'ve read and agree to the Terms & Conditions. You\'ll need to tick every checklist item and confirm your transport plan first.</p>';
   html += '<div id="signatureArea"></div>';
   html += '</div>';
 
@@ -866,6 +885,7 @@ async function confirmTransport(){
     if(switchBtn) switchBtn.style.display = 'none';
     document.getElementById('confirmedBadge').textContent = '✓ Confirmed';
     document.getElementById('confirmedBadge').style.display = 'flex';
+    transportConfirmedState = true;
   } catch(err){
     btn.disabled = false;
     btn.textContent = 'Yes, this is still correct';
@@ -1024,6 +1044,17 @@ function typedSignatureToDataUrl(name){
 async function saveSignature(){
   const btn = document.getElementById('saveSigBtn');
   const syncNote = document.getElementById('sigSyncNote');
+
+  const uncheckedItems = checklistItems.filter(c => !currentChecklistState[c.key]);
+  if(uncheckedItems.length > 0){
+    syncNote.textContent = 'Please tick off every checklist item above before signing (' + uncheckedItems.length + ' remaining).';
+    return;
+  }
+  if(!transportConfirmedState){
+    syncNote.textContent = 'Please confirm your transport plan above before signing.';
+    return;
+  }
+
   let dataUrl = null;
 
   if(sigActiveTab === 'draw'){
