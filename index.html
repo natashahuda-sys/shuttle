@@ -298,6 +298,11 @@
     padding: 10px 14px;
     border-radius: 9px;
   }
+  .confirmed-badge.switched{
+    background: #FDF1DE;
+    border: 1px solid #F2D9A8;
+    color: #6b4a10;
+  }
   .change-note{
     font-size: 12px;
     color: #8a8570;
@@ -735,7 +740,8 @@ async function switchTransport(){
   switchBtn.disabled = true;
   switchBtn.textContent = 'Saving…';
   try {
-    await postUpdate({ transportChangeTo: newText, transportConfirmed: true });
+    const statusText = 'Switched: ' + newText;
+    await postUpdate({ transportChangeTo: newText, transportConfirmed: statusText });
     textEl.textContent = newText;
 
     const newReportingTime = getReportingTime(newText);
@@ -746,8 +752,11 @@ async function switchTransport(){
     switchBtn.style.display = 'none';
     confirmBtn.style.display = 'none';
     const badge = document.getElementById('confirmedBadge');
-    badge.textContent = '✓ Updated and confirmed';
+    badge.textContent = '🔄 ' + statusText;
+    badge.classList.add('switched');
     badge.style.display = 'flex';
+    // They've answered the required question (just not with their original choice),
+    // so they can still proceed to sign — this only affects what's stored in the sheet.
     transportConfirmedState = true;
   } catch(err){
     switchBtn.disabled = false;
@@ -845,7 +854,13 @@ function renderDetail(p){
 
   if(p.TransportConfirmed){
     document.getElementById('confirmBtn').style.display = 'none';
-    document.getElementById('confirmedBadge').style.display = 'flex';
+    const switchBtnEl = document.getElementById('switchBtn');
+    if(switchBtnEl) switchBtnEl.style.display = 'none';
+    const badge = document.getElementById('confirmedBadge');
+    const isSwitched = String(p.TransportConfirmed).indexOf('Switched') === 0;
+    badge.textContent = (isSwitched ? '🔄 ' : '✓ ') + p.TransportConfirmed;
+    badge.classList.toggle('switched', isSwitched);
+    badge.style.display = 'flex';
   }
 
   initSignatureUI(p);
@@ -880,10 +895,12 @@ async function confirmTransport(){
   btn.disabled = true;
   btn.textContent = 'Saving…';
   try {
-    await postUpdate({ transportConfirmed: true });
+    const currentText = document.getElementById('transportText').textContent;
+    const statusText = 'Confirmed: ' + currentText;
+    await postUpdate({ transportConfirmed: statusText });
     btn.style.display = 'none';
     if(switchBtn) switchBtn.style.display = 'none';
-    document.getElementById('confirmedBadge').textContent = '✓ Confirmed';
+    document.getElementById('confirmedBadge').textContent = '✓ ' + statusText;
     document.getElementById('confirmedBadge').style.display = 'flex';
     transportConfirmedState = true;
   } catch(err){
